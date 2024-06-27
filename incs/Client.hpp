@@ -15,7 +15,7 @@ class Client
 		std::string		hostName;
 		int				fd;
 		bool			isRegistered;
-		bool			isAuthed;
+		bool			isPassed;
 	public:
 		Client(int fd);
 
@@ -28,7 +28,7 @@ class Client
 		int					getFd() const;
 
 		bool				getIsRegistered() const;
-		bool				getIsAuthed() const;
+		bool				getIsPassed() const;
 
 		void	setNickName(const std::string nickName);
 		void	setUserName(const std::string UserName);
@@ -37,7 +37,7 @@ class Client
 		void	setServerName(const std::string serverName);
 
 		void	setIsRegistered(bool IsRegistered);
-		void	setIsAuthed(bool IsAuthed);
+		void	setIsPassed(bool IsPassed);
 		~Client();
 };
 

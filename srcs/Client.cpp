@@ -9,7 +9,7 @@ Client::Client(int fd)
 	this->serverName = "";
 	this->fd = fd;
 	this->isRegistered = false;
-	this->isAuthed = false;
+	this->isPassed = false;
 }
 
 const std::string Client::getNickName() const
@@ -47,9 +47,9 @@ bool	Client::getIsRegistered() const
 	return (this->isRegistered);
 }
 
-bool	Client::getIsAuthed() const
+bool	Client::getIsPassed() const
 {
-	return (this->isAuthed);
+	return (this->isPassed);
 }
 
 void	Client::setNickName(const std::string nickName)
@@ -82,9 +82,9 @@ void	Client::setIsRegistered(bool isRegistered)
 	this->isRegistered = isRegistered;
 }
 
-void	Client::setIsAuthed(bool isAuthed)
+void	Client::setIsPassed(bool isPassed)
 {
-	this->isAuthed = isAuthed;
+	this->isPassed = isPassed;
 }
 
 Client::~Client()

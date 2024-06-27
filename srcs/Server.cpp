@@ -44,49 +44,288 @@ void	Server::run()
 				{
 					this->handler(this->clients[this->fds[i].fd]);
 				}
-				else if(this->fds[i].revents & (POLLHUP | POLLERR))
+
+				if (this->fds[i].revents & (POLLHUP | POLLERR))
 				{
-					this->remover(this->clients[this->fds[i].fd])
-				}
+					delete (this->clients[this->fds[i].fd]);
+					close(this->fds[i].fd);
+					this->fds[i].fd = -1;
+				}	
 				fds[i].revents = 0;
 			}
 		}
+		signal(SIGINT, this->signalHandler);
 	}
 }
 
 void	Server::newClient()
 {
-			struct sockaddr_in	newClientAddr;
-			int					newClient;
+	struct sockaddr_in	newClientAddr;
+	int					newClient;
 
-			newClient = accept(this->socketFd, reinterpret_cast<sockaddr*>(&newClientAddr), reinterpret_cast<socklen_t*>(&newClientAddr));
-			if (newClient == -1)
-				perror("Client could not be accepted!");
-			for (int i = 1; i < MAX; i++)
-			{
-				if (this->fds[i].fd == -1)
-				{	
-					if (fcntl(newClient, F_SETFL, O_NONBLOCK) == -1)
-						perror("Client fcntl is not accessable!");
-					this->fds[i].fd = newClient;
-					this->fds[i].events = POLLIN;
-					this->clients[this->fds[i].fd] = new Client(this->fds[i].fd);
-					sender(this->fds[i].fd, "SERVER You must authanticate!\r\n");
-					sender(this->fds[i].fd, "SERVER For help use HELP command!\r\n");
-					printf("Bağlandı\n");
-					break;
-				}
-			}
+	newClient = accept(this->socketFd, reinterpret_cast<sockaddr*>(&newClientAddr), reinterpret_cast<socklen_t*>(&newClientAddr));
+	if (newClient == -1)
+		perror("Client could not be accepted!");
+	for (int i = 1; i < MAX; i++)
+	{
+		if (this->fds[i].fd == -1)
+		{	
+			if (fcntl(newClient, F_SETFL, O_NONBLOCK) == -1)
+				perror("Client fcntl is not accessable!");
+			this->fds[i].fd = newClient;
+			this->fds[i].events = POLLIN;
+			this->clients[this->fds[i].fd] = new Client(this->fds[i].fd);
+			sender(this->fds[i].fd, "SERVER You must authanticate!\r\n");
+			sender(this->fds[i].fd, "SERVER For help use HELP command!\r\n");
+			break;
+		}
+	}
 }
 
 void	Server::handler(Client *client)
 {
+	char						buff[BUFFER_SIZE];
+	int							r_bytes;
+	std::vector<std::string>	cmds;
+
+	memset(buff, 0, sizeof(buff));
+	r_bytes = recv(client->getFd(), buff, sizeof(buff), 0);
+	if (r_bytes > 0)
+	{
+		std::stringstream	ss(buff);
+		std::string			cmd;
+
+
+		while (std::getline(ss, cmd, '\n'))
+		{
+			if (cmd[cmd.size() - 1] == '\r')
+				cmd.erase(cmd.size() - 1);
+
+			std::vector<std::string>	tokens;
+			this->parser(&tokens, cmd);
+			
+			std::cout << "Fd[" << client->getFd() << "]: " << cmd << std::endl; //for Server console to track
+
+			if (tokens[0] == "NICK")
+			{
+				this->nick(client, tokens);
+			}
+			else if (tokens[0] == "USER")
+			{
+				this->user(client, tokens);
+			}
+			else if (tokens[0] == "PASS")
+			{
+				this->pass(client, tokens);
+			}
+			else if (tokens[0] == "HELP")
+			{
+				this->help(client, tokens);
+			}
+			else if (client->getIsRegistered() == false)
+			{
+				this->sender(client->getFd(), "Server Register first use command HELP to get help\r\n");
+			}
+			else if (tokens[0] == "JOIN")
+			{
+				this->join(client, tokens);
+			}
+			else if (tokens[0] == "PRIVMSG")
+			{
+				this->privmsg(client, tokens);
+			}
+			else if (tokens[0] == "PART")
+			{
+				this->part(client, tokens);
+			}
+			else if (tokens[0] == "NOTICE")
+			{
+				this->notice(client, tokens);
+			}
+			else if (tokens[0] == "QUIT")
+			{
+				this->quit(client, tokens);
+			}
+			else if (tokens[0] == "KICK")
+			{
+				this->kick(client, tokens);
+			}
+			else if (tokens[0] == "TOPIC")
+			{
+				this->topic(client, tokens);
+			}
+			else
+			{
+				this->sender(client->getFd(), "Server Unkown command use BOT for help\r\n");
+			}
+		}
+	}
+	else
+	{
+		perror("Client could is not be recived!");
+	}
+}
+
+void	Server::nick(Client *client, std::vector<std::string> tokens)
+{
+	if (tokens.size() == 2)
+	{
+		if (this->isClientExist(tokens[1]) == false)
+		{
+			client->setNickName(tokens[1]);
+			this->sender(client->getFd(), "Server :Nick name is setted!\r\n");
+			this->checkRegister(client);
+		}
+		else
+		{
+			this->sender(client->getFd(), "Server :Nick name is already in use!\r\n");
+		}
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+	}
+}
+
+void	Server::user(Client *client, std::vector<std::string> tokens)
+{
+	if (tokens.size() == 5)
+	{
+		client->setUserName(tokens[1]);
+		client->setHostName(tokens[2]);
+		client->setServerName(tokens[3]);
+		client->setRealName(tokens[4]);
+		this->sender(client->getFd(), "Server :User name is setted!\r\n");
+		this->checkRegister(client);
+	}
+	else
+	{
+		this->sender(client->getFd(), "server :invalid parameter counts!\r\n");
+	}
+}
+
+void	Server::pass(Client *client, std::vector<std::string> tokens)
+{
+	if (client->getIsPassed() == true)
+	{
+		this->sender(client->getFd(), "Server :You are already entered the password!\r\n");
+	}
+	else
+	{
+		if (tokens.size() == 2)
+		{
+			if (tokens[1] == this->password)
+			{
+				client->setIsPassed(true);
+				this->checkRegister(client);
+			}
+			else
+			{
+				this->sender(client->getFd(), "Server :Incorrect password!\r\n");
+			}
+		}
+		else
+		{
+			this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+		}
+	}
+}
+
+void	Server::help(Client *client, std::vector<std::string> tokens)
+{
+	if (client->getIsRegistered() == false)
+	{
+		this->sender(client->getFd(), "Server :To set your nick name use Nick <nickName>!\r\n");
+		this->sender(client->getFd(), "Server :To set your user name use NAME <userName> <hostName> <serverName> :<realName>!\r\n");
+		this->sender(client->getFd(), "Server :To enter the password use PASS <password>!\r\n");
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :To massage someone with privately use PRIVMSG :<msg>!\r\n");
+	}
+}
+
+void	Server::join(Client *client, std::vector<std::string> tokens)
+{
+	if (tokens.size() == 2)
+	{
+		if (this->channels[tokens[1]] == NULL)
+		{
+			this->channels[tokens[1]] = new Channel(tokens[1], client);
+			this->sender(client->getFd(), "Server :Channel has been created!\r\n");
+		}
+		else
+		{
+			this->channels[tokens[1]]->addClient(client);
+			this->sender(client->getFd(), "Server :You joined the channel!\r\n");
+		}
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+	}
+}
+
+void	Server::privmsg(Client *client, std::vector<std::string> tokens)
+{
+	bool	flag = false;
+
+	if (tokens.size() == 3)
+	{
+		for (std::map<int, Client*>::iterator it = this->clients.begin(); it != this->clients.end(); ++it)
+		{
+			if (it->second->getNickName() == tokens[1])
+			{
+				tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
+				this->sender(it->second->getFd(), tokens[2]);
+				flag = true;
+				break;
+			}
+		}
+		if (flag == true)
+		{
+			this->sender(client->getFd(), "Server :Message send!\r\n");
+		}
+		else
+		{
+			this->sender(client->getFd(), "Server :Client did not found!\r\n");
+		}
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+	}
+}
+
+void	Server::part(Client *client, std::vector<std::string> tokens)
+{
 
 }
 
-void	Server::remover(Client *client)
+void	Server::notice(Client *client, std::vector<std::string> tokens)
 {
 
+}
+
+void	Server::quit(Client *client, std::vector<std::string> tokens)
+{
+
+}
+
+void	Server::kick(Client *client, std::vector<std::string> tokens)
+{
+
+}
+
+void	Server::topic(Client *client, std::vector<std::string> tokens)
+{
+
+}
+
+void	Server::signalHandler(int sigNum)
+{
+	std::cout << sigNum << std::endl;
+	exit (1);
 }
 
 void	Server::sender(int fd, std::string msg)
@@ -94,6 +333,64 @@ void	Server::sender(int fd, std::string msg)
 	send(fd, msg.c_str(), msg.size(), 0);
 }
 
+bool	Server::isClientExist(std::string nickName)
+{
+	for (std::map<int, Client*>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+	{
+		if (nickName == it->second->getNickName())
+		{
+			return (true);
+		}
+	}
+	return (false);
+}
+
+void	Server::checkRegister(Client *client)
+{
+	if (client->getIsRegistered() == false)
+	{
+		if (client->getIsPassed() != false && client->getNickName() != "" && client->getUserName() != "")
+		{
+			client->setIsRegistered(true);
+			this->sender(client->getFd(), "Server :You succesfully registered!\r\n");
+		}
+	}
+}
+
+void	Server::parser(std::vector<std::string> *tokens, std::string cmd)
+{
+	size_t		pos = cmd.find(':');
+	std::string	r_str = "";
+	std::string	l_str = "";
+
+	if (pos != std::string::npos)
+	{
+		l_str = cmd.substr(0, pos - 1);
+		r_str = cmd.substr(pos, cmd.size());
+
+		if (r_str[0] == ':')
+			r_str.erase(0, 1);
+		while (r_str[0] == ' ')
+			r_str.erase(0, 1);
+	}
+	else
+	{
+		l_str = cmd;
+	}
+
+	std::stringstream			line(l_str);
+	std::string					str;
+
+	while (std::getline(line, str, ' '))
+	{
+		tokens->push_back(str);
+	}
+
+	if (r_str != "")
+	{
+		tokens->push_back(r_str);
+	}
+}
 
 Server::~Server()
 {

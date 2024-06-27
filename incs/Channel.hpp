@@ -11,6 +11,7 @@ class Channel
 		std::string				name;
 		std::string				topic;
 
+		int						key;
 		Client					*admin;
 
 		std::vector<Client *>	clients;
