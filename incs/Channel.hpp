@@ -31,6 +31,7 @@ class Channel
 		void				addOperator(Client *client);
 		void				removeOperator(Client *client);
 
+		void				channelSender(std::string msg);
 		~Channel();
 };
 

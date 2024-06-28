@@ -3,9 +3,6 @@
 
 #include "headers.hpp"
 
-#define MAX 42
-#define BUFFER_SIZE 128
-
 class	Client;
 class	Channel;
 
@@ -40,6 +37,7 @@ class Server
 		bool	isClientExist(std::string nickName);
 		void	checkRegister(Client *client);
 		void	parser(std::vector<std::string> *tokens, std::string cmd);
+		void	sendError(int fd, int code, std::vector<std::string> tokens);
 		~Server();
 };
 

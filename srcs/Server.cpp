@@ -156,7 +156,7 @@ void	Server::handler(Client *client)
 			}
 			else
 			{
-				this->sender(client->getFd(), "Server Unkown command use BOT for help\r\n");
+				this->sender(client->getFd(), "Server Unkown command use HELP for help\r\n");
 			}
 		}
 	}
@@ -168,7 +168,11 @@ void	Server::handler(Client *client)
 
 void	Server::nick(Client *client, std::vector<std::string> tokens)
 {
-	if (tokens.size() == 2)
+	if (tokens.size() == 1)
+	{
+		this->sendError(client->getFd(), ERR_NONICKNAMEGIVEN, tokens);
+	}
+	else if (tokens.size() == 2)
 	{
 		if (this->isClientExist(tokens[1]) == false)
 		{
@@ -178,12 +182,12 @@ void	Server::nick(Client *client, std::vector<std::string> tokens)
 		}
 		else
 		{
-			this->sender(client->getFd(), "Server :Nick name is already in use!\r\n");
+			this->sendError(client->getFd(), ERR_NICKNAMEINUSE, tokens);
 		}
 	}
 	else
 	{
-		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+		this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
 	}
 }
 
@@ -208,7 +212,7 @@ void	Server::pass(Client *client, std::vector<std::string> tokens)
 {
 	if (client->getIsPassed() == true)
 	{
-		this->sender(client->getFd(), "Server :You are already entered the password!\r\n");
+		this->sendError(client->getFd(), ERR_ALREADYREGISTERED, tokens);
 	}
 	else
 	{
@@ -221,12 +225,12 @@ void	Server::pass(Client *client, std::vector<std::string> tokens)
 			}
 			else
 			{
-				this->sender(client->getFd(), "Server :Incorrect password!\r\n");
+				this->sendError(client->getFd(), ERR_PASSWDMISMATCH, tokens);
 			}
 		}
 		else
 		{
-			this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+			this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
 		}
 	}
 }
@@ -241,7 +245,16 @@ void	Server::help(Client *client, std::vector<std::string> tokens)
 	}
 	else
 	{
-		this->sender(client->getFd(), "Server :To massage someone with privately use PRIVMSG :<msg>!\r\n");
+		this->sender(client->getFd(), "Server :At command explanation <values> are values without < and >!\r\n");
+		this->sender(client->getFd(), "Server :At command explanation [values] are optional!\r\n");
+		this->sender(client->getFd(), "Server :Syntax : is used for last paramaters not divide words by space and take as a one parameter!\r\n");
+
+		this->sender(client->getFd(), "Server :-------------------------------------------------------------:\r\n");
+
+		this->sender(client->getFd(), "Server :To massage someone with privately use PRIVMSG <nickName> :<msg>!\r\n");
+		this->sender(client->getFd(), "Server :To leave a channel use PART <channelName> [:<msg>]!\r\n");
+		this->sender(client->getFd(), "Server :To leave a channel use NOTICE <channelName> :<msg>\r\n");
+		this->sender(client->getFd(), "Server :To leave the server use QUIT\r\n");
 	}
 }
 
@@ -262,7 +275,7 @@ void	Server::join(Client *client, std::vector<std::string> tokens)
 	}
 	else
 	{
-		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+		this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
 	}
 }
 
@@ -299,17 +312,66 @@ void	Server::privmsg(Client *client, std::vector<std::string> tokens)
 
 void	Server::part(Client *client, std::vector<std::string> tokens)
 {
+	if (tokens.size() == 2 && tokens.size() == 3)
+	{
+		Channel *channel = this->channels[tokens[1]];
 
+		if (channel != NULL)
+		{
+			channel->removeClient(client);
+			if (tokens.size() == 3)
+			{
+				tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
+				channel->channelSender(tokens[2]);
+			}
+		}
+		else
+		{
+			this->sender(client->getFd(), "Server :Channel did not found!\r\n");
+		}
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+	}
 }
 
 void	Server::notice(Client *client, std::vector<std::string> tokens)
 {
+	if (tokens.size() == 3)
+	{
+		Channel *channel = this->channels[tokens[1]];
+
+		if (channel != NULL)
+		{
+			tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
+			channel->channelSender(tokens[2]);
+		}
+		else
+		{
+			this->sender(client->getFd(), "Server :Channel did not found!\r\n");
+		}
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
+	}
 
 }
 
 void	Server::quit(Client *client, std::vector<std::string> tokens)
 {
+	(void) tokens;
 
+	for (int i = 1; i < MAX; i++)
+	{
+		if (this->fds[i].fd == client->getFd())
+		{
+			this->fds[i].fd = -1;
+			close(client->getFd());
+			delete (client);
+		}
+	}
 }
 
 void	Server::kick(Client *client, std::vector<std::string> tokens)
@@ -389,6 +451,35 @@ void	Server::parser(std::vector<std::string> *tokens, std::string cmd)
 	if (r_str != "")
 	{
 		tokens->push_back(r_str);
+	}
+}
+
+void	Server::sendError(int fd, int code, std::vector<std::string> tokens)
+{
+	if (code == ERR_NEEDMOREPARAMS)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :Not enough parameters\r\n";
+		this->sender(fd, msg);
+	}
+	else if (code == ERR_ALREADYREGISTERED)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :You are already registered\r\n";
+		this->sender(fd, msg);
+	}
+	else if (code == ERR_PASSWDMISMATCH)
+	{
+		std::string msg = +i std::to_string(code) + ":Password incorrect\r\n";
+		this->sender(fd, msg);
+	}
+	else if (code == ERR_NONICKNAMEGIVEN)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :No nickname given\r\n";
+		this->sender(fd, msg);
+	}
+	else if (code == ERR_NICKNAMEINUSE)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :Nickname is already in use\r\n";
+		this->sender(fd, msg);
 	}
 }
 

@@ -53,6 +53,14 @@ void				Channel::removeOperator(Client *client)
 	if (it != this->operators.end())
 		this->operators.erase(it);
 }
+	
+void				Channel::channelSender(std::string msg)
+{
+	for (std::vector<Client*>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+	{
+		send((*it)->getFd(), msg.c_str(), msg.size(), 0);
+	}
+}
 
 Channel::~Channel()
 {
