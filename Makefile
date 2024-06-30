@@ -6,14 +6,14 @@
 #    By: marvin <marvin@42.fr>                      +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2024/06/25 18:39:30 by marvin            #+#    #+#              #
-#    Updated: 2024/06/27 14:28:30 by marvin           ###   ########.fr        #
+#    Updated: 2024/06/30 17:03:46 by marvin           ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
 NAME	=	ircserv
 CC		=	g++
 CFLAGS	=	-Wall -Wextra -Werror -std=c++98
-CFLAGS	=	-std=c++98
+CFLAGS	=	-std=c++98 -fsanitize=address
 
 EXEC	=	main	\
 			Server	\

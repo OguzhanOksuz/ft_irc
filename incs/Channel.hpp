@@ -32,7 +32,7 @@ class Channel
 		void					addOperator(Client *client);
 		void					removeOperator(Client *client);
 
-		void					channelSender(std::string msg);
+		void					channelSender(std::string msg, Client *client);
 		~Channel();
 };
 

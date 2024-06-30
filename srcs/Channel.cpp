@@ -54,11 +54,16 @@ void				Channel::removeOperator(Client *client)
 		this->operators.erase(it);
 }
 	
-void				Channel::channelSender(std::string msg)
+void				Channel::channelSender(std::string msg, Client *client)
 {
-	for (std::vector<Client*>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+	printf("FUCasK\n");
+	for (std::vector<Client *>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
 	{
-		send((*it)->getFd(), msg.c_str(), msg.size(), 0);
+		printf("FUCK\n");
+		if (client != *it)
+		{
+			send((*it)->getFd(), msg.c_str(), msg.size(), 0);
+		}
 	}
 }
 

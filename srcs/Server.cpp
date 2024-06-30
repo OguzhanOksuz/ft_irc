@@ -104,7 +104,7 @@ void	Server::handler(Client *client)
 			std::vector<std::string>	tokens;
 			this->parser(&tokens, cmd);
 			
-			std::cout << "Fd[" << client->getFd() << "]: " << cmd << std::endl; //for Server console to track
+			std::cout << "Recived <-------- Fd[" << client->getFd() << "]: " << cmd << std::endl; //for Server console to track
 
 			if (tokens[0] == "NICK")
 			{
@@ -124,7 +124,7 @@ void	Server::handler(Client *client)
 			}
 			else if (client->getIsRegistered() == false)
 			{
-				this->sender(client->getFd(), "Server Register first use command HELP to get help\r\n");
+				this->sender(client->getFd(), ":Server 451 " + client->getNickName() + " :Register first use command HELP to get help\r\n");
 			}
 			else if (tokens[0] == "JOIN")
 			{
@@ -140,15 +140,11 @@ void	Server::handler(Client *client)
 			}
 			else if (tokens[0] == "NOTICE")
 			{
-				this->notice(client, tokens);
+				//this->notice(client, tokens);
 			}
 			else if (tokens[0] == "QUIT")
 			{
 				this->quit(client, tokens);
-			}
-			else if (tokens[0] == "KICK")
-			{
-				this->kick(client, tokens);
 			}
 			else if (tokens[0] == "TOPIC")
 			{
@@ -251,10 +247,7 @@ void	Server::help(Client *client, std::vector<std::string> tokens)
 
 		this->sender(client->getFd(), "Server :-------------------------------------------------------------:\r\n");
 
-		this->sender(client->getFd(), "Server :To massage someone with privately use PRIVMSG <nickName> :<msg>!\r\n");
 		this->sender(client->getFd(), "Server :To leave a channel use PART <channelName> [:<msg>]!\r\n");
-		this->sender(client->getFd(), "Server :To leave a channel use NOTICE <channelName> :<msg>\r\n");
-		this->sender(client->getFd(), "Server :To leave the server use QUIT\r\n");
 	}
 }
 
@@ -274,18 +267,29 @@ void	Server::join(Client *client, std::vector<std::string> tokens)
 		}
 		else if (tokens[1] == "0")
 		{
+			for (std::map<std::string, Channel*>::iterator it = this->channels.begin(); it != this->channels.end(); it++)
+			{
+				if (this->isClientInChannel(client, it->second))
+				{
+					Channel *channel = it->second;
 
+					channel->removeClient(client);
+					this->sender(client->getFd(), ":" + client->getName() + " PART " + channel->getName() + " .\r\n");
+				}
+			}
 		}
 		else if (channel == NULL)
 		{
 			this->channels[tokens[1]] = new Channel(tokens[1], client);
 			std::string msg = ":" + client->getName() + " JOIN" + " :" + tokens[1] + "\r\n";
 			this->sender(client->getFd(), msg);
+			channel->channelSender(msg, client);
 		}
-		else if (this->isClientInChannel(client, channel))
+		else if (this->isClientInChannel(client, channel) == false)
 		{
-			channel->channelSender(":" + channel->getName() + " " + client->getNickName() + " has joined the channel\r\b");
+			std::string msg = ":" + client->getName() + " JOIN" + " :" + tokens[1] + "\r\n";
 			channel->addClient(client);
+			channel->channelSender(msg, client);
 		}
 	}
 	else
@@ -298,25 +302,50 @@ void	Server::privmsg(Client *client, std::vector<std::string> tokens)
 {
 	bool	flag = false;
 
-	if (tokens.size() == 3)
+	if (tokens.size() < 3)
 	{
-		for (std::map<int, Client*>::iterator it = this->clients.begin(); it != this->clients.end(); ++it)
+		this->sendError(client, ERR_NEEDMOREPARAMS, tokens);
+	}
+	else if (tokens.size() == 3)
+	{
+		if (tokens[1][0] == '#')
 		{
-			if (it->second->getNickName() == tokens[1])
+			Channel *channel = this->channels[tokens[1]];
+
+			if (channel != NULL)
 			{
-				tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
-				this->sender(it->second->getFd(), tokens[2]);
 				flag = true;
-				break;
+				if (this->isClientInChannel(client, channel) == true)
+				{
+					tokens[2] = ":" + client->getNickName() + " PRIVMSG " + tokens[1] + " :"+ tokens[2] + "\r\n";
+					channel->channelSender(tokens[2], client);
+				}
+				else
+				{
+					this->sendError(client, ERR_NOTONCHANNEL, tokens);
+				}
 			}
-		}
-		if (flag == true)
-		{
-			this->sender(client->getFd(), "Server :Message send!\r\n");
+			else
+			{
+				flag = false;
+			}	
 		}
 		else
 		{
-			this->sender(client->getFd(), "Server :Client did not found!\r\n");
+			for (std::map<int, Client*>::iterator it = this->clients.begin(); it != this->clients.end(); ++it)
+			{
+				if (it->second->getNickName() == tokens[1])
+				{
+					tokens[2] = ":" + client->getNickName() + " PRIVMSG " + tokens[1] +" :" + tokens[2] + "\r\n";
+					this->sender(it->second->getFd(), tokens[2]);
+					flag = true;
+					break;
+				}
+			}
+		}
+		if (flag == false)
+		{
+			this->sendError(client, ERR_NOSUCHNICK, tokens);
 		}
 	}
 	else
@@ -340,17 +369,17 @@ void	Server::part(Client *client, std::vector<std::string> tokens)
 				if (tokens.size() == 3)
 				{
 					tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
-					channel->channelSender(tokens[2]);
+					channel->channelSender(tokens[2], client);
 				}
 			}
 			else
 			{
-				this->sender(client->getFd(), "Server :You are not in " + channel->getName() + "\r\n");
+				this->sendError(client, ERR_NOTONCHANNEL, tokens);
 			}
 		}
 		else
 		{
-			this->sender(client->getFd(), "Server :Channel did not found!\r\n");
+			this->sendError(client, ERR_NOSUCHCHANNEL, tokens);
 		}
 	}
 	else
@@ -368,7 +397,7 @@ void	Server::notice(Client *client, std::vector<std::string> tokens)
 		if (channel != NULL)
 		{
 			tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
-			channel->channelSender(tokens[2]);
+			channel->channelSender(tokens[2], client);
 		}
 		else
 		{
@@ -397,11 +426,6 @@ void	Server::quit(Client *client, std::vector<std::string> tokens)
 	}
 }
 
-void	Server::kick(Client *client, std::vector<std::string> tokens)
-{
-
-}
-
 void	Server::topic(Client *client, std::vector<std::string> tokens)
 {
 
@@ -415,6 +439,7 @@ void	Server::signalHandler(int sigNum)
 
 void	Server::sender(int fd, std::string msg)
 {
+	std::cout << "Send --------> Fd[" << fd << "]: " << msg << std::endl; //for Server console to track
 	send(fd, msg.c_str(), msg.size(), 0);
 }
 
@@ -503,6 +528,21 @@ void	Server::sendError(Client* client, int code, std::vector<std::string> tokens
 	else if (code == ERR_NICKNAMEINUSE)
 	{
 		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :Nickname is already in use\r\n";
+		this->sender(client->getFd(), msg);
+	}
+	else if (code == ERR_NOSUCHCHANNEL)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :No such a channel\r\n";
+		this->sender(client->getFd(), msg);
+	}
+	else if (code == ERR_NOTONCHANNEL)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :Not on channel\r\n";
+		this->sender(client->getFd(), msg);
+	}
+	else if (code == ERR_NOSUCHNICK)
+	{
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :No such a nick\r\n";
 		this->sender(client->getFd(), msg);
 	}
 }
