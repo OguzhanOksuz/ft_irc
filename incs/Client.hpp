@@ -21,7 +21,7 @@ class Client
 
 		const std::string	getNickName() const;
 		const std::string	getUserName() const;
-		const int			getMode() const;
+		int					getMode() const;
 		const std::string	getUnused() const;
 		const std::string	getRealName() const;
 		const std::string	getName() const;

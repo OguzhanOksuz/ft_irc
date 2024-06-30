@@ -5,7 +5,6 @@ Channel::Channel(std::string name, Client *admin)
 	this->name = name;
 	this->admin = admin;
 	this->addClient(admin);
-	this->addOperator(admin);
 }
 
 void				Channel::setName(std::string name)
@@ -41,30 +40,30 @@ void				Channel::removeClient(Client *client)
 		this->clients.erase(it);
 }
 
-void				Channel::addOperator(Client *client)
-{
-	this->operators.push_back(client);
-}
-
-void				Channel::removeOperator(Client *client)
-{
-	std::vector<Client *>::iterator it = std::find(this->operators.begin(), this->operators.end(), client);
-
-	if (it != this->operators.end())
-		this->operators.erase(it);
-}
-	
 void				Channel::channelSender(std::string msg, Client *client)
 {
-	printf("FUCasK\n");
-	for (std::vector<Client *>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
-	{
-		printf("FUCK\n");
-		if (client != *it)
-		{
+    for (std::vector<Client *>::iterator it = this->clients.begin(); it != this->clients.end(); ++it)
+    {
+        if (client != *it)
+        {
 			send((*it)->getFd(), msg.c_str(), msg.size(), 0);
+        }
+    }
+}
+
+std::string			Channel::getClientNames()
+{
+	std::string msg = "";
+
+    for (std::vector<Client *>::iterator it = this->clients.begin(); it != this->clients.end(); ++it)
+    {
+		if (msg.size() != 0)
+		{
+			msg += " ";
 		}
-	}
+		msg += (*it)->getNickName();
+    }
+	return (msg);
 }
 
 Channel::~Channel()

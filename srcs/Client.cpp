@@ -22,7 +22,7 @@ const std::string Client::getUserName() const
 	return (this->userName);
 }
 
-const int	Client::getMode() const
+int	Client::getMode() const
 {
 	return (this->mode);
 }
@@ -96,5 +96,5 @@ void	Client::setIsPassed(bool isPassed)
 
 Client::~Client()
 {
-	std::cout << "Client " << this->nickName << ", left the server!" << std::cout;
+	std::cout << "Client " << this->nickName << ", left the server!" << std::endl;
 }

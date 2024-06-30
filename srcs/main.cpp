@@ -1,9 +1,16 @@
 #include "../incs/Server.hpp"
 
+void signalHandler(int code)
+{
+	std::cout << "Signal " + std::to_string(code) + " cought!" << std::endl;
+	exit(0);
+}
+
 int main(int ac, char **av)
 {
 	int port;
 
+	signal(SIGINT, signalHandler);
 	if (ac == 3 && av[1][0])
 	{
 		for (int i = 0; av[1][i]; i++)
@@ -21,7 +28,14 @@ int main(int ac, char **av)
 		}
 		else
 		{
-			Server(port, av[2]);
+			try
+			{
+				Server(port, av[2]);
+			}
+			catch(const std::exception& e) 
+			{
+				std::cerr << "Caught exception : " << e.what() << std::endl;
+			}
 		}
 	}
 	else

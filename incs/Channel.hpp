@@ -11,14 +11,11 @@ class Channel
 		std::string				name;
 		std::string				topic;
 
-		int						key;
-		Client					*admin;
-
 	public:
 		Channel(std::string name, Client *admin);
 		
 		std::vector<Client *>	clients;
-		std::vector<Client *>	operators;
+		Client					*admin;
 
 		void					setName(std::string name);
 		const std::string		getName() const;
@@ -29,10 +26,8 @@ class Channel
 		void					addClient(Client *client);
 		void					removeClient(Client *client);
 
-		void					addOperator(Client *client);
-		void					removeOperator(Client *client);
-
 		void					channelSender(std::string msg, Client *client);
+		std::string				getClientNames();
 		~Channel();
 };
 

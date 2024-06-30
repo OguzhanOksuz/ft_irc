@@ -47,14 +47,14 @@ void	Server::run()
 
 				if (this->fds[i].revents & (POLLHUP | POLLERR))
 				{
-					delete (this->clients[this->fds[i].fd]);
-					close(this->fds[i].fd);
-					this->fds[i].fd = -1;
+					std::vector<std::string> ftokens;
+
+					ftokens.push_back("QUIT");
+					this->quit(this->clients[this->fds[i].fd],ftokens);
 				}	
 				fds[i].revents = 0;
 			}
 		}
-		signal(SIGINT, this->signalHandler);
 	}
 }
 
@@ -98,6 +98,8 @@ void	Server::handler(Client *client)
 
 		while (std::getline(ss, cmd, '\n'))
 		{
+			if (cmd.size() <= 0)
+				continue;
 			if (cmd[cmd.size() - 1] == '\r')
 				cmd.erase(cmd.size() - 1);
 
@@ -138,17 +140,21 @@ void	Server::handler(Client *client)
 			{
 				this->part(client, tokens);
 			}
-			else if (tokens[0] == "NOTICE")
+			else if (tokens[0] == "TOPIC")
 			{
-				//this->notice(client, tokens);
+				this->topic(client, tokens);
+			}
+			else if (tokens[0] == "KICK")
+			{
+				this->kick(client, tokens);
+			}
+			else if (tokens[0] == "OP")
+			{
+				this->op(client, tokens);
 			}
 			else if (tokens[0] == "QUIT")
 			{
 				this->quit(client, tokens);
-			}
-			else if (tokens[0] == "TOPIC")
-			{
-				this->topic(client, tokens);
 			}
 		}
 	}
@@ -231,25 +237,6 @@ void	Server::pass(Client *client, std::vector<std::string> tokens)
 	}
 }
 
-void	Server::help(Client *client, std::vector<std::string> tokens)
-{
-	if (client->getIsRegistered() == false)
-	{
-		this->sender(client->getFd(), "Server :To set your nick name use Nick <nickName>!\r\n");
-		this->sender(client->getFd(), "Server :To set your user name use NAME <userName> <hostName> <unused> :<realName>!\r\n");
-		this->sender(client->getFd(), "Server :To enter the password use PASS <password>!\r\n");
-	}
-	else
-	{
-		this->sender(client->getFd(), "Server :At command explanation <values> are values without < and >!\r\n");
-		this->sender(client->getFd(), "Server :At command explanation [values] are optional!\r\n");
-		this->sender(client->getFd(), "Server :Syntax : is used for last paramaters not divide words by space and take as a one parameter!\r\n");
-
-		this->sender(client->getFd(), "Server :-------------------------------------------------------------:\r\n");
-
-		this->sender(client->getFd(), "Server :To leave a channel use PART <channelName> [:<msg>]!\r\n");
-	}
-}
 
 void	Server::join(Client *client, std::vector<std::string> tokens)
 {
@@ -261,26 +248,32 @@ void	Server::join(Client *client, std::vector<std::string> tokens)
 	{
 		Channel	*channel = this->channels[tokens[1]];
 
-		if (tokens[1][0] != '#')
-		{
-			this->sender(client->getFd(), ":SERVER :Channel names should start with #\r\n");
-		}
-		else if (tokens[1] == "0")
+		if (tokens[1] == "0")
 		{
 			for (std::map<std::string, Channel*>::iterator it = this->channels.begin(); it != this->channels.end(); it++)
 			{
+				if ((it->second) == NULL)
+				{
+					break;
+				}
 				if (this->isClientInChannel(client, it->second))
 				{
 					Channel *channel = it->second;
 
 					channel->removeClient(client);
 					this->sender(client->getFd(), ":" + client->getName() + " PART " + channel->getName() + " .\r\n");
+					channel->channelSender(":" + client->getName() + " PART " + channel->getName() + " .\r\n", client);
 				}
 			}
+		}
+		else if (tokens[1][0] != '#')
+		{
+			this->sender(client->getFd(), ":SERVER :Channel names should start with #\r\n");
 		}
 		else if (channel == NULL)
 		{
 			this->channels[tokens[1]] = new Channel(tokens[1], client);
+			channel = this->channels[tokens[1]];
 			std::string msg = ":" + client->getName() + " JOIN" + " :" + tokens[1] + "\r\n";
 			this->sender(client->getFd(), msg);
 			channel->channelSender(msg, client);
@@ -288,8 +281,15 @@ void	Server::join(Client *client, std::vector<std::string> tokens)
 		else if (this->isClientInChannel(client, channel) == false)
 		{
 			std::string msg = ":" + client->getName() + " JOIN" + " :" + tokens[1] + "\r\n";
-			channel->addClient(client);
 			channel->channelSender(msg, client);
+			this->sender(client->getFd(), msg);
+			msg = ":" + client->getUnused() + " 353 " + channel->getName() + " = " + channel->getName() + " :" + channel->getClientNames() + "\r\n";
+			this->sender(client->getFd(), msg);
+			msg = ":" + client->getUnused() + " 366 " + channel->getName() + " " + channel->getName() + " :end of /NAMES list\r\n";
+			this->sender(client->getFd(), msg);
+			msg = ":SERVER 332 " + client->getNickName() + " " + channel->getName() + " :" + channel->getTopic() + "\r\n";
+			this->sender(client->getFd(), msg);
+			channel->addClient(client);
 		}
 	}
 	else
@@ -366,6 +366,7 @@ void	Server::part(Client *client, std::vector<std::string> tokens)
 			{
 				channel->removeClient(client);
 				this->sender(client->getFd(), ":" + client->getName() + " PART " + channel->getName() + " .\r\n");
+				channel->channelSender(":" + client->getName() + " PART " + channel->getName() + " .\r\n", client);
 				if (tokens.size() == 3)
 				{
 					tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
@@ -388,29 +389,6 @@ void	Server::part(Client *client, std::vector<std::string> tokens)
 	}
 }
 
-void	Server::notice(Client *client, std::vector<std::string> tokens)
-{
-	if (tokens.size() == 3)
-	{
-		Channel *channel = this->channels[tokens[1]];
-
-		if (channel != NULL)
-		{
-			tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
-			channel->channelSender(tokens[2], client);
-		}
-		else
-		{
-			this->sender(client->getFd(), "Server :Channel did not found!\r\n");
-		}
-	}
-	else
-	{
-		this->sender(client->getFd(), "Server :invalid parameter counts!\r\n");
-	}
-
-}
-
 void	Server::quit(Client *client, std::vector<std::string> tokens)
 {
 	(void) tokens;
@@ -419,22 +397,200 @@ void	Server::quit(Client *client, std::vector<std::string> tokens)
 	{
 		if (this->fds[i].fd == client->getFd())
 		{
+			std::cout << "by" << std::endl;
+			std::vector<std::string> ftokens;
+			std::string msg = ":" + client->getName() + " QUIT :QUIT\r\n";
+
+			ftokens.push_back("JOIN");
+			ftokens.push_back("0");
+			this->join(client, ftokens);
+			this->sender(client->getFd(), msg);
 			this->fds[i].fd = -1;
+			this->clients.erase(client->getFd());
 			close(client->getFd());
 			delete (client);
+			break;
+		}
+	}
+}
+void	Server::kick(Client *client, std::vector<std::string> tokens)
+{
+	if (tokens.size() < 3)
+	{
+		this->sendError(client, ERR_NEEDMOREPARAMS, tokens);
+	}
+	else
+	{
+		Channel *channel = this->channels[tokens[1]];
+
+		if (channel == NULL)
+		{
+			this->sendError(client, ERR_NOSUCHCHANNEL, tokens);
+		}
+		else
+		{
+			Client *kickClient = NULL;
+
+			for (std::map<int, Client *>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+			{
+				if (it->second->getNickName() == tokens[2])
+					kickClient = it->second;
+			}
+			if (kickClient == NULL)
+			{
+				this->sendError(client, ERR_NOSUCHNICK, tokens);
+			}
+			else
+			{
+				if (this->isClientInChannel(kickClient, channel) == false)
+				{
+					this->sendError(client, ERR_NOTONCHANNEL, tokens);
+				}
+				else
+				{
+					if (client != channel->admin)
+					{
+						std::string msg = ":SERVER KICK :You are not operator\r\n";
+						this->sender(client->getFd(), msg);
+					}
+					else
+					{
+						std::vector<std::string> ftokens;
+
+						ftokens.push_back("PART");
+						ftokens.push_back(channel->getName());
+						this->part(kickClient, ftokens);
+					}
+				}
+			}
+		}
+	}
+}
+
+void	Server::op(Client *client, std::vector<std::string> tokens)
+{
+	if (tokens.size() < 3)
+	{
+		this->sendError(client, ERR_NEEDMOREPARAMS, tokens);
+	}
+	else
+	{
+		Channel *channel = this->channels[tokens[1]];
+
+		if (channel == NULL)
+		{
+			this->sendError(client, ERR_NOSUCHCHANNEL, tokens);
+		}
+		else
+		{
+			Client *kickClient = NULL;
+
+			for (std::map<int, Client *>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+			{
+				if (it->second->getNickName() == tokens[2])
+					kickClient = it->second;
+			}
+			if (kickClient == NULL)
+			{
+				this->sendError(client, ERR_NOSUCHNICK, tokens);
+			}
+			else
+			{
+				if (this->isClientInChannel(kickClient, channel) == false)
+				{
+					this->sendError(client, ERR_NOTONCHANNEL, tokens);
+				}
+				else
+				{
+					if (client != channel->admin)
+					{
+						std::string msg = ":SERVER OP :You are not operator\r\n";
+						this->sender(client->getFd(), msg);
+					}
+					else
+					{
+						channel->admin = kickClient;
+						std::string msg = ":SERVER OP :Now you are operator\r\n";
+						this->sender(client->getFd(), msg);
+						
+					}
+				}
+			}
 		}
 	}
 }
 
 void	Server::topic(Client *client, std::vector<std::string> tokens)
 {
+	if (tokens.size() < 2)
+	{
+		this->sendError(client, ERR_NEEDMOREPARAMS, tokens);
+	}
+	else
+	{
+		Channel *channel = this->channels[tokens[1]];
 
+		if (channel == NULL)
+		{
+			this->sendError(client, ERR_NOSUCHCHANNEL, tokens);
+		}
+		else
+		{
+			if (this->isClientInChannel(client, channel) == false)
+			{
+				this->sendError(client, ERR_NOTONCHANNEL, tokens);
+			}
+			else
+			{
+				if (tokens.size() == 2)
+				{
+					this->sender(client->getFd(), ":Server " + channel->getName() + " :Topic is " + channel->getTopic() + "\r\n");
+				}
+				else
+				{
+					if (client == channel->admin)
+					{
+						std::string msg = ":SERVER 332 " + client->getNickName() + " " + channel->getName() + " :" + tokens[2] + "\r\n";
+						this->sender(client->getFd(), msg);
+						channel->channelSender(msg, client);
+						channel->setTopic(tokens[2]);
+					}
+					else
+					{
+						std::string msg = ":SERVER TOPIC :You are not operator\r\n";
+						this->sender(client->getFd(), msg);
+					}
+				}
+			}
+		}
+	}
 }
 
-void	Server::signalHandler(int sigNum)
+void	Server::help(Client *client, std::vector<std::string> tokens)
 {
-	std::cout << sigNum << std::endl;
-	exit (1);
+	(void) tokens;
+
+	if (client->getIsRegistered() == false)
+	{
+		this->sender(client->getFd(), "Server :At command explanation <values> are values without < and >\r\n");
+		this->sender(client->getFd(), "Server :At command explanation [values] are optional\r\n");
+		this->sender(client->getFd(), "Server :Syntax : is used for last paramaters not divide words by space and take as a one parameter\r\n");
+		this->sender(client->getFd(), "Server :-------------------------------------------------------------:\r\n");
+		this->sender(client->getFd(), "Server :To set your nick name use NICK <nickName>\r\n");
+		this->sender(client->getFd(), "Server :To set your user name use USER <userName> <mode> <unused> :<realName>\r\n");
+		this->sender(client->getFd(), "Server :To enter the password use PASS <password>\r\n");
+	}
+	else
+	{
+		this->sender(client->getFd(), "Server :At command explanation <values> are values without < and >\r\n");
+		this->sender(client->getFd(), "Server :At command explanation [values] are optional\r\n");
+		this->sender(client->getFd(), "Server :Syntax : is used for last paramaters not divide words by space and take as a one parameter\r\n");
+		this->sender(client->getFd(), "Server :-------------------------------------------------------------:\r\n");
+		this->sender(client->getFd(), "Server :To join a channel use JOIN <nicklName> <msg>\r\n");
+		this->sender(client->getFd(), "Server :To leave a channel use PART <channelName>\r\n");
+		this->sender(client->getFd(), "Server :To message a channel or a client use PRIVMSG <nickName> :<msg>\r\n");
+		this->sender(client->getFd(), "Server :To quit use QUIT\r\n");
+	}
 }
 
 void	Server::sender(int fd, std::string msg)
@@ -561,5 +717,20 @@ bool	Server::isClientInChannel(Client *client, Channel *channel)
 
 Server::~Server()
 {
+	std::vector<std::string> tokens;
 
+	tokens.push_back("QUIT");
+	for (std::map<int, Client*>::iterator it = this->clients.begin(); it != this->clients.end(); it++)
+	{
+		this->quit(it->second, tokens);
+		delete (it->second);
+	}
+
+	for (std::map<std::string, Channel*>::iterator it = this->channels.begin(); it != this->channels.end(); it++)
+	{
+		delete (it->second);
+	}
+	
+	close (this->socketFd);
+	exit(1);
 }

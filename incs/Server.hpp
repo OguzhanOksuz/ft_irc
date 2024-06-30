@@ -24,15 +24,15 @@ class Server
 		void	handler(Client *client);
 		void	nick(Client *client, std::vector<std::string> tokens);
 		void	user(Client *client, std::vector<std::string> tokens);
-		void	pass(Client *client, std::vector<std::string> tokens);
-		void	help(Client *client, std::vector<std::string> tokens);
+		void	pass(Client *client, std::vector<std::string> tokens);		
 		void	join(Client *client, std::vector<std::string> tokens);
 		void	privmsg(Client *client, std::vector<std::string> tokens);
 		void	part(Client *client, std::vector<std::string> tokens);
-		void	notice(Client *client, std::vector<std::string> tokens);
 		void	quit(Client *client, std::vector<std::string> tokens);
 		void	kick(Client *client, std::vector<std::string> tokens);
 		void	topic(Client *client, std::vector<std::string> tokens);
+		void	op(Client *client, std::vector<std::string> tokens);
+		void	help(Client *client, std::vector<std::string> tokens);
 		static void	signalHandler(int sigNum);
 		bool	isClientExist(std::string nickName);
 		void	checkRegister(Client *client);
