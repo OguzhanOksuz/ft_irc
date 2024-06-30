@@ -14,24 +14,25 @@ class Channel
 		int						key;
 		Client					*admin;
 
-		std::vector<Client *>	clients;
-		std::vector<Client *>	operators;
 	public:
 		Channel(std::string name, Client *admin);
+		
+		std::vector<Client *>	clients;
+		std::vector<Client *>	operators;
 
-		void				setName(std::string name);
-		const std::string	getName() const;
+		void					setName(std::string name);
+		const std::string		getName() const;
 
-		void				setTopic(std::string topic);
-		const std::string	getTopic() const;
+		void					setTopic(std::string topic);
+		const std::string		getTopic() const;
 
-		void				addClient(Client *client);
-		void				removeClient(Client *client);
+		void					addClient(Client *client);
+		void					removeClient(Client *client);
 
-		void				addOperator(Client *client);
-		void				removeOperator(Client *client);
+		void					addOperator(Client *client);
+		void					removeOperator(Client *client);
 
-		void				channelSender(std::string msg);
+		void					channelSender(std::string msg);
 		~Channel();
 };
 

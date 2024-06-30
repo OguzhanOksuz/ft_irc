@@ -154,10 +154,6 @@ void	Server::handler(Client *client)
 			{
 				this->topic(client, tokens);
 			}
-			else
-			{
-				this->sender(client->getFd(), "Server Unkown command use HELP for help\r\n");
-			}
 		}
 	}
 	else
@@ -170,41 +166,45 @@ void	Server::nick(Client *client, std::vector<std::string> tokens)
 {
 	if (tokens.size() == 1)
 	{
-		this->sendError(client->getFd(), ERR_NONICKNAMEGIVEN, tokens);
+		this->sendError(client, ERR_NONICKNAMEGIVEN, tokens);
 	}
 	else if (tokens.size() == 2)
 	{
 		if (this->isClientExist(tokens[1]) == false)
 		{
+			std::string msg = ":" + client->getName() + " " + tokens[0] + " " + tokens[1] + "\r\n"; 
 			client->setNickName(tokens[1]);
-			this->sender(client->getFd(), "Server :Nick name is setted!\r\n");
 			this->checkRegister(client);
+			this->sender(client->getFd(), msg);
 		}
 		else
 		{
-			this->sendError(client->getFd(), ERR_NICKNAMEINUSE, tokens);
+			this->sendError(client, ERR_NICKNAMEINUSE, tokens);
 		}
 	}
 	else
 	{
-		this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
+		this->sender(client->getFd(), "NICK :invalid parameter counts!\r\n");
 	}
 }
 
 void	Server::user(Client *client, std::vector<std::string> tokens)
 {
-	if (tokens.size() == 5)
+	if (client->getUserName() != "")
+	{
+		this->sendError(client, ERR_ALREADYREGISTERED, tokens);
+	}
+	else if (tokens.size() == 5)
 	{
 		client->setUserName(tokens[1]);
-		client->setHostName(tokens[2]);
-		client->setServerName(tokens[3]);
+		client->setMode(tokens[2]);
+		client->setUnused(tokens[3]);
 		client->setRealName(tokens[4]);
-		this->sender(client->getFd(), "Server :User name is setted!\r\n");
 		this->checkRegister(client);
 	}
 	else
 	{
-		this->sender(client->getFd(), "server :invalid parameter counts!\r\n");
+		this->sender(client->getFd(), "USER :invalid parameter counts!\r\n");
 	}
 }
 
@@ -212,7 +212,7 @@ void	Server::pass(Client *client, std::vector<std::string> tokens)
 {
 	if (client->getIsPassed() == true)
 	{
-		this->sendError(client->getFd(), ERR_ALREADYREGISTERED, tokens);
+		this->sendError(client, ERR_ALREADYREGISTERED, tokens);
 	}
 	else
 	{
@@ -225,12 +225,12 @@ void	Server::pass(Client *client, std::vector<std::string> tokens)
 			}
 			else
 			{
-				this->sendError(client->getFd(), ERR_PASSWDMISMATCH, tokens);
+				this->sendError(client, ERR_PASSWDMISMATCH, tokens);
 			}
 		}
 		else
 		{
-			this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
+			this->sender(client->getFd(), "PASS :invalid parameter counts!\r\n");
 		}
 	}
 }
@@ -240,7 +240,7 @@ void	Server::help(Client *client, std::vector<std::string> tokens)
 	if (client->getIsRegistered() == false)
 	{
 		this->sender(client->getFd(), "Server :To set your nick name use Nick <nickName>!\r\n");
-		this->sender(client->getFd(), "Server :To set your user name use NAME <userName> <hostName> <serverName> :<realName>!\r\n");
+		this->sender(client->getFd(), "Server :To set your user name use NAME <userName> <hostName> <unused> :<realName>!\r\n");
 		this->sender(client->getFd(), "Server :To enter the password use PASS <password>!\r\n");
 	}
 	else
@@ -260,22 +260,37 @@ void	Server::help(Client *client, std::vector<std::string> tokens)
 
 void	Server::join(Client *client, std::vector<std::string> tokens)
 {
-	if (tokens.size() == 2)
+	if (tokens.size() == 1)
 	{
-		if (this->channels[tokens[1]] == NULL)
+		this->sendError(client, ERR_NEEDMOREPARAMS, tokens);
+	}
+	else if (tokens.size() == 2)
+	{
+		Channel	*channel = this->channels[tokens[1]];
+
+		if (tokens[1][0] != '#')
+		{
+			this->sender(client->getFd(), ":SERVER :Channel names should start with #\r\n");
+		}
+		else if (tokens[1] == "0")
+		{
+
+		}
+		else if (channel == NULL)
 		{
 			this->channels[tokens[1]] = new Channel(tokens[1], client);
-			this->sender(client->getFd(), "Server :Channel has been created!\r\n");
+			std::string msg = ":" + client->getName() + " JOIN" + " :" + tokens[1] + "\r\n";
+			this->sender(client->getFd(), msg);
 		}
-		else
+		else if (this->isClientInChannel(client, channel))
 		{
-			this->channels[tokens[1]]->addClient(client);
-			this->sender(client->getFd(), "Server :You joined the channel!\r\n");
+			channel->channelSender(":" + channel->getName() + " " + client->getNickName() + " has joined the channel\r\b");
+			channel->addClient(client);
 		}
 	}
 	else
 	{
-		this->sendError(client->getFd(), ERR_NEEDMOREPARAMS, tokens);
+		this->sender(client->getFd(), "PASS :invalid parameter counts!\r\n");
 	}
 }
 
@@ -312,17 +327,25 @@ void	Server::privmsg(Client *client, std::vector<std::string> tokens)
 
 void	Server::part(Client *client, std::vector<std::string> tokens)
 {
-	if (tokens.size() == 2 && tokens.size() == 3)
+	if (tokens.size() == 2 || tokens.size() == 3)
 	{
 		Channel *channel = this->channels[tokens[1]];
 
 		if (channel != NULL)
 		{
-			channel->removeClient(client);
-			if (tokens.size() == 3)
+			if (this->isClientInChannel(client, channel) == true)
 			{
-				tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
-				channel->channelSender(tokens[2]);
+				channel->removeClient(client);
+				this->sender(client->getFd(), ":" + client->getName() + " PART " + channel->getName() + " .\r\n");
+				if (tokens.size() == 3)
+				{
+					tokens[2] = client->getNickName() + " :" + tokens[2] + "\r\n";
+					channel->channelSender(tokens[2]);
+				}
+			}
+			else
+			{
+				this->sender(client->getFd(), "Server :You are not in " + channel->getName() + "\r\n");
 			}
 		}
 		else
@@ -414,7 +437,8 @@ void	Server::checkRegister(Client *client)
 		if (client->getIsPassed() != false && client->getNickName() != "" && client->getUserName() != "")
 		{
 			client->setIsRegistered(true);
-			this->sender(client->getFd(), "Server :You succesfully registered!\r\n");
+			std::string msg = ":Server 001 " + client->getNickName() + " :Welcome to the Internet Relay Network :" + client->getName() + "\r\n";
+			this->sender(client->getFd(), msg);
 		}
 	}
 }
@@ -454,33 +478,45 @@ void	Server::parser(std::vector<std::string> *tokens, std::string cmd)
 	}
 }
 
-void	Server::sendError(int fd, int code, std::vector<std::string> tokens)
+void	Server::sendError(Client* client, int code, std::vector<std::string> tokens)
 {
 	if (code == ERR_NEEDMOREPARAMS)
 	{
-		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :Not enough parameters\r\n";
-		this->sender(fd, msg);
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " " + client->getNickName() + " :Not enough parameters\r\n";
+		this->sender(client->getFd(), msg);
 	}
 	else if (code == ERR_ALREADYREGISTERED)
 	{
-		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :You are already registered\r\n";
-		this->sender(fd, msg);
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) +  ":You are already registered\r\n";
+		this->sender(client->getFd(), msg);
 	}
 	else if (code == ERR_PASSWDMISMATCH)
 	{
-		std::string msg = +i std::to_string(code) + ":Password incorrect\r\n";
-		this->sender(fd, msg);
+		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :Password incorrect\r\n";
+		this->sender(client->getFd(), msg);
 	}
 	else if (code == ERR_NONICKNAMEGIVEN)
 	{
 		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :No nickname given\r\n";
-		this->sender(fd, msg);
+		this->sender(client->getFd(), msg);
 	}
 	else if (code == ERR_NICKNAMEINUSE)
 	{
 		std::string msg = ":" + tokens[0] + " " + std::to_string(code) + " :" + tokens[1] + " :Nickname is already in use\r\n";
-		this->sender(fd, msg);
+		this->sender(client->getFd(), msg);
 	}
+}
+
+bool	Server::isClientInChannel(Client *client, Channel *channel)
+{
+	for (std::vector<Client *>::iterator it = channel->clients.begin(); it != channel->clients.end(); it++)
+	{
+		if (*it == client)
+		{
+			return (true);
+		}
+	}
+	return (false);
 }
 
 Server::~Server()

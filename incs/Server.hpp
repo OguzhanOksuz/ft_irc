@@ -10,6 +10,7 @@ class Server
 {
 	private:
 		std::string						password;
+		std::string						name;
 		int								port;
 		int								socketFd;
 		struct sockaddr_in				sockAddr;
@@ -33,11 +34,12 @@ class Server
 		void	kick(Client *client, std::vector<std::string> tokens);
 		void	topic(Client *client, std::vector<std::string> tokens);
 		static void	signalHandler(int sigNum);
-		void	sender(int fd, std::string msg);
 		bool	isClientExist(std::string nickName);
 		void	checkRegister(Client *client);
 		void	parser(std::vector<std::string> *tokens, std::string cmd);
-		void	sendError(int fd, int code, std::vector<std::string> tokens);
+		void	sender(int fd, std::string msg);
+		void	sendError(Client *client, int code, std::vector<std::string> tokens);
+		bool	isClientInChannel(Client *client, Channel *channel);
 		~Server();
 };
 

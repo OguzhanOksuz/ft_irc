@@ -4,9 +4,9 @@ Client::Client(int fd)
 {
 	this->nickName = "";
 	this->userName = "";
+	this->mode = 0;
+	this->unused = "";
 	this->realName = "";
-	this->hostName = "";
-	this->serverName = "";
 	this->fd = fd;
 	this->isRegistered = false;
 	this->isPassed = false;
@@ -22,19 +22,26 @@ const std::string Client::getUserName() const
 	return (this->userName);
 }
 
+const int	Client::getMode() const
+{
+	return (this->mode);
+}
+
+const std::string Client::getUnused() const
+{
+	return (this->unused);
+}
+
 const std::string Client::getRealName() const
 {
 	return (this->realName);
 }
 
-const std::string Client::getHostName() const
+const std::string Client::getName() const
 {
-	return (this->hostName);
-}
+	std::string name = this->getNickName() + "!" + this->getUserName() + "@" + this->getUnused();
 
-const std::string Client::getServerName() const
-{
-	return (this->serverName);
+	return (name);
 }
 
 int	Client::getFd() const
@@ -62,19 +69,19 @@ void	Client::setUserName(const std::string userName)
 	this->userName = userName;
 }
 
+void	Client::setMode(const std::string mode)
+{
+	this->mode = std::stoi(mode);
+}
+
+void	Client::setUnused(const std::string unused)
+{
+	this->unused = unused;
+}
+
 void	Client::setRealName(const std::string realName)
 {
 	this->realName = realName;
-}
-
-void	Client::setHostName(const std::string hostName)
-{
-	this->hostName = hostName;
-}
-
-void	Client::setServerName(const std::string serverName)
-{
-	this->serverName = serverName;
 }
 
 void	Client::setIsRegistered(bool isRegistered)

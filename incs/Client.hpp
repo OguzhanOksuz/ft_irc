@@ -10,9 +10,9 @@ class Client
 	private:
 		std::string		nickName;
 		std::string		userName;
-		std::string		serverName;
+		int				mode;
+		std::string		unused;
 		std::string		realName;
-		std::string		hostName;
 		int				fd;
 		bool			isRegistered;
 		bool			isPassed;
@@ -21,9 +21,10 @@ class Client
 
 		const std::string	getNickName() const;
 		const std::string	getUserName() const;
+		const int			getMode() const;
+		const std::string	getUnused() const;
 		const std::string	getRealName() const;
-		const std::string	getHostName() const;
-		const std::string	getServerName() const;
+		const std::string	getName() const;
 
 		int					getFd() const;
 
@@ -32,9 +33,9 @@ class Client
 
 		void	setNickName(const std::string nickName);
 		void	setUserName(const std::string UserName);
+		void	setMode(const std::string HostName);
+		void	setUnused(const std::string serverName);
 		void	setRealName(const std::string RealName);
-		void	setHostName(const std::string HostName);
-		void	setServerName(const std::string serverName);
 
 		void	setIsRegistered(bool IsRegistered);
 		void	setIsPassed(bool IsPassed);
